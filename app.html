@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0a0a0a" />
+<title>Discuss with VoiceAI | Live Discussion</title>
+<style>
+  :root{
+    --bg:#0a0a0a; --panel:#121212; --panel2:#171717; --border:#242424;
+    --text:#e8e8e8; --dim:#8a8a8a; --dim2:#5a5a5a;
+    --green:#5EFF8A; --pink:#FF6EAD; --blue:#5AA9FF; --red:#FF6E6E; --amber:#D9A857;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height:100vh; padding: 20px 16px 40px; padding-block:20px 40px;
+  }
+  .mono{font-family:var(--mono)}
+  .wrap{max-width:820px; margin:0 auto;}
+  header{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:22px;}
+  .brand{display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--text);}
+  .brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--green),var(--blue));display:flex;align-items:center;justify-content:center;color:#000;font-weight:800;font-size:12px;}
+  .brand b{font-weight:700} .brand em{font-style:normal;color:var(--green)}
+  .pill{font-size:10px; letter-spacing:.14em; text-transform:uppercase; padding:6px 12px; border-radius:999px; border:1px solid var(--border); color:var(--dim); display:flex; align-items:center; gap:6px;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--dim2);}
+  .dot.live{background:var(--green); box-shadow:0 0 8px var(--green);}
+  .dot.err{background:var(--red); box-shadow:0 0 8px var(--red);}
+
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:28px; margin-bottom:16px;}
+  .view{display:none;} .view.active{display:block;}
+
+  /* Screen 1 */
+  #startView .eyebrow{color:var(--green); font-size:11px; letter-spacing:.14em; text-transform:uppercase; margin:0 0 12px; font-weight:600;}
+  #startView h1{font-size:clamp(22px,4vw,34px); line-height:1.25; margin:0 0 22px;}
+  #startView h1 span{color:var(--green);}
+  .cta{
+    appearance:none; border:none; cursor:pointer; border-radius:12px;
+    background:linear-gradient(135deg,var(--green),#39d971); color:#08130b; font-weight:700;
+    padding:14px 22px; font-size:15px; display:inline-flex; align-items:center; gap:8px;
+  }
+  .cta:disabled{opacity:.5; cursor:not-allowed;}
+  .cta.secondary{background:var(--panel2); color:var(--text); border:1px solid var(--border);}
+  .note{color:var(--dim2); font-size:12px; margin-top:14px;}
+  details.cfg{margin-top:18px; padding-top:16px; border-top:1px solid var(--border);}
+  details.cfg summary{cursor:pointer; font-size:12px; color:var(--dim); list-style:none;}
+  details.cfg summary::-webkit-details-marker{display:none;}
+  details.cfg summary::before{content:'▸ '; color:var(--dim2);}
+  details.cfg[open] summary::before{content:'▾ ';}
+  details.cfg label{font-size:11px; color:var(--dim); display:block; margin:12px 0 6px;}
+  details.cfg input{width:100%; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px 10px; font-family:var(--mono); font-size:12px;}
+
+  /* Screen 2 */
+  .viva-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px; flex-wrap:wrap;}
+  .topic-chip{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
+  .topic-chip b{color:var(--text); text-transform:none; letter-spacing:0; font-size:15px; display:block; margin-top:2px;}
+
+  /* orbit visualization -- topic center, orbiting tags, You/Companion state cards.
+     Tuned to actually READ as animated at a glance: a 70s rotation only
+     covers ~5° in a 3-second look, which is indistinguishable from static --
+     everything here completes a full, visible cycle in single-digit seconds. */
+  .orbit-stage{position:relative; height:260px; margin:8px 0 18px; display:flex; align-items:center; justify-content:center;}
+  .orbit-ring{
+    position:absolute; width:210px; height:210px; border-radius:50%;
+    border:1px solid rgba(255,255,255,.1);
+    animation:ring-pulse 3s ease-in-out infinite;
+  }
+  .orbit-ring::before{
+    content:''; position:absolute; inset:-3px; border-radius:50%; padding:2px;
+    background:conic-gradient(from 0deg, transparent, var(--green), transparent 35%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude;
+    opacity:.55; animation:ring-sweep 4s linear infinite;
+  }
+  @keyframes ring-pulse{
+    0%,100%{transform:scale(1); box-shadow:0 0 40px 6px rgba(94,255,138,.06), inset 0 0 30px rgba(255,255,255,.02); border-color:rgba(255,255,255,.08);}
+    50%{transform:scale(1.035); box-shadow:0 0 80px 18px rgba(94,255,138,.18), inset 0 0 50px rgba(255,255,255,.05); border-color:rgba(94,255,138,.35);}
+  }
+  @keyframes ring-sweep{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  .orbit-link{position:absolute; top:50%; height:2px; width:120px; z-index:1; transform:translateY(-50%); overflow:hidden; border-radius:2px; background:rgba(255,255,255,.04);}
+  .orbit-link.left{left:calc(8% + 118px);}
+  .orbit-link.right{right:calc(8% + 118px);}
+  .orbit-link i{position:absolute; inset:0; width:40%; background:linear-gradient(90deg, transparent, currentColor, transparent); opacity:.9; animation:link-sweep 1.8s linear infinite; box-shadow:0 0 8px currentColor;}
+  .orbit-link.left{color:var(--green);} .orbit-link.right{color:var(--blue);}
+  .orbit-link.right i{animation-direction:reverse;}
+  @keyframes link-sweep{from{transform:translateX(-120%);}to{transform:translateX(220%);}}
+  /* Two nested layers per tag: the outer orbits with .orbit-tags' rotation
+     (position only -- rotate(angle) places each tag's slot, the matching
+     rotate(-angle) cancels that SAME rotation so the slot itself doesn't
+     spin); the inner .orbit-tag-spin runs its own counter-rotation over the
+     identical timing as .orbit-tags, canceling the PARENT's time-varying
+     rotation too. Without that inner counter-spin, the parent's rotation
+     still reaches every descendant (CSS transforms compose down the tree),
+     so the label text visibly tumbles/mirrors over the cycle instead of
+     staying upright while it orbits. */
+  .orbit-tags{position:absolute; inset:0; animation:orbit-spin 22s linear infinite;}
+  .orbit-tag-pos{
+    position:absolute; top:50%; left:50%;
+    transform:rotate(var(--angle)) translate(148px) rotate(calc(-1 * var(--angle))) translate(-50%,-50%);
+  }
+  .orbit-tag-spin{display:inline-block; animation:orbit-counter-spin 22s linear infinite;}
+  .orbit-tag{
+    display:inline-block; font-size:9px; letter-spacing:.1em; color:var(--dim2); white-space:nowrap;
+    padding:4px 9px; border:1px solid var(--border); border-radius:999px; background:rgba(10,10,10,.7);
+    animation:tag-twinkle 3s ease-in-out infinite;
+  }
+  .orbit-tag-pos:nth-child(2) .orbit-tag{animation-delay:.75s;}
+  .orbit-tag-pos:nth-child(3) .orbit-tag{animation-delay:1.5s;}
+  .orbit-tag-pos:nth-child(4) .orbit-tag{animation-delay:2.25s;}
+  @keyframes tag-twinkle{0%,100%{opacity:.55; border-color:var(--border);}50%{opacity:1; border-color:rgba(94,255,138,.4); color:#bfffd4;}}
+  @keyframes orbit-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+  @keyframes orbit-counter-spin{from{transform:rotate(0deg)}to{transform:rotate(-360deg)}}
+  .topic-center{position:relative; text-align:center; max-width:180px; z-index:2; animation:topic-float 3s ease-in-out infinite;}
+  .topic-center b{display:block; font-size:17px; font-weight:600; font-style:italic; animation:topic-glow 3s ease-in-out infinite;}
+  @keyframes topic-float{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
+  @keyframes topic-glow{0%,100%{text-shadow:0 0 0 transparent;}50%{text-shadow:0 0 20px rgba(94,255,138,.5);}}
+  .topic-center small{display:block; margin-top:5px; font-size:9px; letter-spacing:.14em; color:var(--dim2); text-transform:uppercase;}
+
+  .state-card{
+    position:absolute; top:50%; width:118px;
+    background:rgba(13,13,13,.85); border-radius:10px; padding:9px 10px; z-index:3;
+    backdrop-filter:blur(2px);
+    animation:card-float 3s ease-in-out infinite;
+  }
+  .state-card.companion{left:8%; border:1px solid rgba(94,255,138,.35); box-shadow:0 0 18px rgba(94,255,138,.08);}
+  .state-card.you{right:8%; border:1px solid rgba(90,169,255,.35); box-shadow:0 0 18px rgba(90,169,255,.08); animation-delay:1.5s;}
+  .state-card.active.companion{box-shadow:0 0 30px rgba(94,255,138,.3);}
+  .state-card.active.you{box-shadow:0 0 30px rgba(90,169,255,.3);}
+  @keyframes card-float{0%,100%{transform:translateY(-50%);}50%{transform:translateY(calc(-50% - 5px));}}
+  .state-card-head{font-size:9px; letter-spacing:.1em; display:flex; align-items:center; gap:5px; margin-bottom:6px;}
+  .state-card.companion .state-card-head{color:var(--green);}
+  .state-card.you .state-card-head{color:var(--blue);}
+  .state-card-head .dot2{width:5px;height:5px;border-radius:50%;background:currentColor; animation:dot-blink 1.4s ease-in-out infinite;}
+  @keyframes dot-blink{0%,100%{opacity:1; box-shadow:0 0 4px currentColor;}50%{opacity:.3; box-shadow:none;}}
+  .wave{display:flex; align-items:flex-end; gap:2px; height:14px; margin-bottom:6px;}
+  .wave i{width:3px; border-radius:2px; background:currentColor; opacity:.35; height:35%; transition:height .1s ease; transform-origin:bottom; animation:bar-idle 1.4s ease-in-out infinite;}
+  .wave i:nth-child(1){animation-delay:0s;} .wave i:nth-child(2){animation-delay:.15s;}
+  .wave i:nth-child(3){animation-delay:.3s;} .wave i:nth-child(4){animation-delay:.45s;}
+  .wave i:nth-child(5){animation-delay:.6s;}
+  @keyframes bar-idle{0%,100%{transform:scaleY(1);}50%{transform:scaleY(1.8);}}
+  .state-card.companion .wave{color:var(--green);}
+  .state-card.you .wave{color:var(--blue);}
+  .state-card.active .wave i{opacity:.9;}
+  .state-card-label{font-size:10px; color:var(--dim); text-transform:lowercase;}
+
+  .feature-pills{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;}
+  .feature-pill{font-size:9px; letter-spacing:.12em; text-transform:uppercase; padding:6px 12px; border-radius:999px; border:1px solid var(--border); color:var(--dim); display:inline-flex; align-items:center; gap:6px;}
+  .feature-pill i{width:5px;height:5px;border-radius:50%;background:currentColor;}
+  .feature-pill.blue{color:var(--blue);} .feature-pill.amber{color:var(--amber);} .feature-pill.pink{color:var(--pink);}
+
+  .transcript{height:340px; overflow-y:auto; background:#0d0d0d; border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:10px;}
+  .line{max-width:88%; padding:9px 13px; border-radius:12px; font-size:14px; line-height:1.45;}
+  .line label{display:flex; align-items:center; gap:5px; font-size:9px; letter-spacing:.12em; text-transform:uppercase; opacity:.6; margin-bottom:3px;}
+  .line label i{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .line.student{align-self:flex-end; background:#17301f; border:1px solid #1f4a2b; color:#d9ffe4;}
+  .line.student label{color:var(--blue);}
+  .line.agent{align-self:flex-start; background:#171717; border:1px solid var(--border); color:var(--text);}
+  .line.agent label{color:var(--green);}
+  .line.interim{opacity:.55;}
+  .line.challenge{background:rgba(217,168,87,.08); border:1px solid rgba(217,168,87,.4);}
+  .line.challenge label{color:var(--amber);}
+  .line.challenge .challenge-tag{display:block; font-size:9px; letter-spacing:.1em; color:var(--amber); text-transform:uppercase; margin-bottom:5px;}
+  .empty-hint{color:var(--dim2); font-size:13px; margin:auto; text-align:center;}
+
+  .controls{display:flex; align-items:center; gap:14px; margin-top:16px; flex-wrap:wrap;}
+  .mic-btn{width:56px;height:56px;border-radius:50%; border:2px solid var(--border); background:var(--panel2); color:var(--text); font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+  .mic-btn.active{border-color:var(--green); box-shadow:0 0 0 6px rgba(94,255,138,.12);}
+  .mic-copy strong{display:block; font-size:13px;}
+  .mic-copy small{color:var(--dim); font-size:11px;}
+  .end-btn{margin-left:auto; background:transparent; border:1px solid var(--border); color:var(--dim); padding:10px 16px; border-radius:10px; cursor:pointer; font-size:13px;}
+  .end-btn:hover{color:var(--red); border-color:var(--red);}
+
+  .chat-form{display:flex; gap:10px; margin-top:16px;}
+  .chat-form input{flex:1; background:var(--panel2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:12px 14px; font-size:14px;}
+  .chat-form button{background:var(--green); border:none; color:#08130b; font-weight:700; border-radius:10px; padding:0 18px; cursor:pointer;}
+
+  #errorBanner{display:none; background:rgba(255,110,110,.1); border:1px solid rgba(255,110,110,.4); color:#ffb3b3; padding:12px 16px; border-radius:10px; font-size:13px; margin-bottom:16px;}
+
+  footer{text-align:center; color:var(--dim2); font-size:11px; margin-top:28px; letter-spacing:.06em;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="brand" href="Voice-Topic-Companion.html">
+      <span class="brand-mark">DV</span>
+      <span><b>Discuss with</b> <em>VoiceAI</em></span>
+    </a>
+    <span class="pill"><span class="dot" id="connDot"></span><span id="connLabel">not connected</span></span>
+  </header>
+
+  <div id="errorBanner"></div>
+
+  <!-- Screen 1: Start -->
+  <section class="view active card" id="startView">
+    <p class="eyebrow">If you can explain it, you understand it.</p>
+    <h1>Any topic. <span>Discussed, explained, debated.</span></h1>
+    <button class="cta" id="startBtn">🎙 Start Discussion</button>
+    <div class="note">No login. Mic access requested only when you start.</div>
+    <details class="cfg">
+      <summary>Advanced: backend URL</summary>
+      <label for="apiBase">Backend URL (FastAPI)</label>
+      <input id="apiBase" class="mono" value="http://localhost:8000" spellcheck="false" />
+    </details>
+  </section>
+
+  <!-- Screen 2: Live Discussion -->
+  <section class="view card" id="vivaView">
+    <div class="viva-header">
+      <span class="pill"><span class="dot live"></span> LIVE</span>
+    </div>
+
+    <div class="orbit-stage">
+      <div class="orbit-ring"></div>
+      <div class="orbit-link left"><i></i></div>
+      <div class="orbit-link right"><i></i></div>
+      <div class="orbit-tags">
+        <div class="orbit-tag-pos" style="--angle:0deg"><span class="orbit-tag-spin"><span class="orbit-tag">SPACE</span></span></div>
+        <div class="orbit-tag-pos" style="--angle:90deg"><span class="orbit-tag-spin"><span class="orbit-tag">PHILOSOPHY</span></span></div>
+        <div class="orbit-tag-pos" style="--angle:180deg"><span class="orbit-tag-spin"><span class="orbit-tag">CRICKET</span></span></div>
+        <div class="orbit-tag-pos" style="--angle:270deg"><span class="orbit-tag-spin"><span class="orbit-tag">AI</span></span></div>
+      </div>
+      <div class="topic-center">
+        <b id="topicLabel">Waiting…</b>
+        <small>TOPIC • CENTER</small>
+      </div>
+      <div class="state-card companion" id="companionCard">
+        <div class="state-card-head"><span class="dot2"></span>COMPANION</div>
+        <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="state-card-label" id="companionLabel">listening</div>
+      </div>
+      <div class="state-card you" id="youCard">
+        <div class="state-card-head"><span class="dot2"></span>YOU</div>
+        <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="state-card-label" id="youLabel">listening</div>
+      </div>
+    </div>
+
+    <div class="feature-pills">
+      <span class="feature-pill blue"><i></i>Talk any topic</span>
+      <span class="feature-pill amber"><i></i>Debate mode</span>
+      <span class="feature-pill pink"><i></i>Hinglish ready</span>
+    </div>
+
+    <div class="transcript" id="transcript">
+      <div class="empty-hint">Your conversation will appear here.<br><small>Ask a question, request an example, or ask it to argue the other side.</small></div>
+    </div>
+
+    <!-- real voice controls (hidden in mock mode) -->
+    <div class="controls" id="voiceControls">
+      <button class="mic-btn" id="micIndicator" disabled>●</button>
+      <div class="mic-copy"><strong id="micLabel">Connecting…</strong><small>Speak naturally, interrupt anytime</small></div>
+      <button class="end-btn" id="endBtn">End session</button>
+    </div>
+
+    <!-- mock-mode text fallback (shown only when the backend has no AssemblyAI key yet) -->
+    <form class="chat-form" id="chatForm" style="display:none;">
+      <input id="chatInput" placeholder="Type a topic, a question, or a challenge…" autocomplete="off" />
+      <button type="submit">Send</button>
+      <button type="button" class="end-btn" id="endBtnMock">End</button>
+    </form>
+  </section>
+
+  <footer>DISCUSS WITH VOICEAI · Built for the AssemblyAI Voice Agent Hackathon</footer>
+</div>
+
+<script>
+/* =========================================================================
+   Discuss with VoiceAI -- browser client
+   Real path:  browser <-> our backend (GET /api/token only)
+               browser <-> wss://agents.assemblyai.com/v1/ws (direct, real voice)
+   Mock path:  browser <-> our backend (POST /api/mock_chat) -- text chat,
+               same persona, used when the backend has no AssemblyAI key yet.
+
+   This is a plain open-ended discussion agent -- no topic map, no grading,
+   no "understanding verdict". One screen just shows the live transcript
+   until the user ends the session.
+   ========================================================================= */
+
+const $ = (id) => document.getElementById(id);
+const views = { start: $('startView'), viva: $('vivaView') };
+function showView(name){ Object.values(views).forEach(v => v.classList.remove('active')); views[name].classList.add('active'); window.scrollTo({top:0, behavior:'smooth'}); }
+function apiBase(){ return $('apiBase').value.trim().replace(/\/$/, ''); }
+function showError(msg){ const el = $('errorBanner'); el.textContent = msg; el.style.display = 'block'; }
+function clearError(){ $('errorBanner').style.display = 'none'; }
+function setConn(label, mode){
+  $('connLabel').textContent = label;
+  const dot = $('connDot');
+  dot.className = 'dot' + (mode === 'live' ? ' live' : mode === 'err' ? ' err' : '');
+}
+
+// Cheap heuristic: guess the agent's current mode from what it just said, so
+// the COMPANION state card and the transcript's counter-question callout
+// track the live conversation without the agent needing to emit an explicit
+// state event of its own.
+function classifyAgentText(text){
+  const t = text.toLowerCase();
+  if (t.includes('push back') || t.includes('counter') || t.includes("what's the strongest argument") || t.includes('play devil') || t.includes('other side')) return 'challenging';
+  if (t.includes('what topic') || t.includes('what would you like to know')) return 'listening';
+  return 'explaining';
+}
+function setCompanionState(state, {active=true} = {}){
+  $('companionLabel').textContent = state;
+  $('companionCard').classList.toggle('active', active);
+}
+function setYouState(state, {active=true} = {}){
+  $('youLabel').textContent = state;
+  $('youCard').classList.toggle('active', active);
+}
+
+let ws = null;
+let audioCtx = null;
+let micStream = null;
+let micNode = null;
+let playHead = 0;
+let topicKnown = false;
+let mockHistory = []; // [{role, text}]
+let agentDeltaBuffer = ''; // accumulates transcript.agent.delta chunks for the current reply
+
+// ---- transcript rendering ----
+// Tracked per-speaker so a student interruption mid-agent-reply (barge-in)
+// doesn't overwrite the agent's still-open interim bubble with the
+// student's text -- each speaker keeps its own in-progress line.
+const interimLines = { student: null, agent: null };
+function addLine(speaker, text, {interim=false, challenge=false} = {}){
+  const box = $('transcript');
+  const hint = box.querySelector('.empty-hint');
+  if (hint) hint.remove();
+  const labelHtml = `<label><i></i>${speaker === 'student' ? 'You' : 'Companion'}</label>`;
+  if (interim) {
+    if (!interimLines[speaker]) {
+      const el = document.createElement('div');
+      el.className = `line ${speaker} interim`;
+      el.innerHTML = `${labelHtml}<span class="text"></span>`;
+      box.appendChild(el);
+      interimLines[speaker] = el;
+    }
+    interimLines[speaker].querySelector('.text').textContent = text;
+  } else {
+    if (interimLines[speaker]) { interimLines[speaker].remove(); interimLines[speaker] = null; }
+    const line = document.createElement('div');
+    line.className = `line ${speaker}` + (challenge ? ' challenge' : '');
+    const tagHtml = challenge ? '<span class="challenge-tag">↳ counter-question</span>' : '';
+    line.innerHTML = `${labelHtml}${tagHtml}<span class="text"></span>`;
+    line.querySelector('.text').textContent = text;
+    box.appendChild(line);
+  }
+  box.scrollTop = box.scrollHeight;
+  // Only ever consider a FINAL (non-interim) student line as the topic --
+  // an interim delta is still-changing text, and locking onto a half-spoken
+  // fragment would freeze the display on something incomplete.
+  if (speaker === 'student' && !interim && !topicKnown) {
+    maybeSetTopic(text);
+  }
+}
+
+// A real conversation usually opens with a greeting before the actual topic
+// ("Hello." / "Hi there" / "Namaste"), so naively taking the first thing the
+// student says isn't reliable -- skip pure-greeting utterances and keep
+// waiting for the first substantive one.
+const GREETING_RE = /^(hi+|hey+|hello+|namaste|hola|yo|sup|good\s?(morning|afternoon|evening)|kaise ho|kya haal|test(ing)?)[.!?\s]*$/i;
+function maybeSetTopic(text){
+  const trimmed = text.trim();
+  if (!trimmed || GREETING_RE.test(trimmed)) return;
+  topicKnown = true;
+  $('topicLabel').textContent = trimmed.length > 28 ? trimmed.slice(0, 28) + '…' : trimmed;
+}
+
+// ---- PCM16 mic capture @ 24kHz mono --------------------------------------
+// AssemblyAI's Voice Agent defaults input.format to PCM at 24 kHz when not
+// set explicitly (agent_config.py now sets it explicitly too, to be safe).
+// Sending audio resampled to the WRONG rate doesn't error -- it just plays
+// back sped up/slowed down to the STT engine, which is a very plausible
+// cause of misheard words, so this rate must match the agent's config.
+const TARGET_SAMPLE_RATE = 24000;
+
+function floatTo16BitPCM(float32){
+  const out = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++){
+    let s = Math.max(-1, Math.min(1, float32[i]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return out;
+}
+function resampleTo(float32, inRate, outRate){
+  if (inRate === outRate) return float32;
+  const ratio = inRate / outRate;
+  const outLen = Math.floor(float32.length / ratio);
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++){
+    const srcIdx = i * ratio;
+    const i0 = Math.floor(srcIdx), i1 = Math.min(i0 + 1, float32.length - 1);
+    const frac = srcIdx - i0;
+    out[i] = float32[i0] * (1 - frac) + float32[i1] * frac;
+  }
+  return out;
+}
+function bytesToBase64(bytes){
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  return btoa(binary);
+}
+function base64ToBytes(b64){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function startMic(){
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  // Ask for a 24kHz context directly -- Chrome desktop honors an explicit
+  // sampleRate, which skips our resample step entirely (cleaner audio, no
+  // aliasing from the linear-interpolation fallback below). Browsers that
+  // ignore the hint (e.g. Safari) fall back to runtime resampling.
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: TARGET_SAMPLE_RATE });
+  const source = audioCtx.createMediaStreamSource(micStream);
+  // ScriptProcessorNode is deprecated but needs no extra worklet file --
+  // good enough for a hackathon MVP; swap for AudioWorklet for production.
+  micNode = audioCtx.createScriptProcessor(4096, 1, 1);
+  micNode.onaudioprocess = (e) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const input = e.inputBuffer.getChannelData(0);
+    const resampled = resampleTo(input, audioCtx.sampleRate, TARGET_SAMPLE_RATE);
+    const pcm16 = floatTo16BitPCM(resampled);
+    const bytes = new Uint8Array(pcm16.buffer);
+    ws.send(JSON.stringify({ type: 'input.audio', audio: bytesToBase64(bytes) }));
+  };
+  // Route through a silent gain instead of speakers to avoid feedback --
+  // ScriptProcessorNode only fires once it's part of a graph reaching the
+  // destination.
+  const silentGain = audioCtx.createGain();
+  silentGain.gain.value = 0;
+  source.connect(micNode);
+  micNode.connect(silentGain);
+  silentGain.connect(audioCtx.destination);
+
+  // Analysers for the YOU/COMPANION waveform bars -- purely visual taps,
+  // don't touch the actual audio graph doing the real work above.
+  micAnalyser = audioCtx.createAnalyser();
+  micAnalyser.fftSize = 64;
+  source.connect(micAnalyser);
+  companionAnalyser = audioCtx.createAnalyser();
+  companionAnalyser.fftSize = 64;
+  companionAnalyser.connect(audioCtx.destination);
+  startWaveformLoop();
+
+  $('micIndicator').classList.add('active');
+  $('micLabel').textContent = 'Listening…';
+}
+
+function stopMic(){
+  if (micNode) { try { micNode.disconnect(); } catch(e){} micNode = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  $('micIndicator').classList.remove('active');
+  stopWaveformLoop();
+  micAnalyser = null;
+  companionAnalyser = null;
+}
+
+// ---- YOU/COMPANION waveform bars, driven by real audio level when a voice
+// session is active (silently does nothing in mock mode, where there's no
+// real audio to visualize) ----
+let micAnalyser = null;
+let companionAnalyser = null;
+let waveformRAF = null;
+function startWaveformLoop(){
+  const youBars = document.querySelectorAll('#youCard .wave i');
+  const compBars = document.querySelectorAll('#companionCard .wave i');
+  const youData = new Uint8Array(32);
+  const compData = new Uint8Array(32);
+  function tick(){
+    if (micAnalyser) {
+      micAnalyser.getByteFrequencyData(youData);
+      youBars.forEach((bar, i) => { bar.style.height = `${20 + (youData[i * 3] / 255) * 80}%`; });
+    }
+    if (companionAnalyser) {
+      companionAnalyser.getByteFrequencyData(compData);
+      compBars.forEach((bar, i) => { bar.style.height = `${20 + (compData[i * 3] / 255) * 80}%`; });
+    }
+    waveformRAF = requestAnimationFrame(tick);
+  }
+  tick();
+}
+function stopWaveformLoop(){
+  if (waveformRAF) cancelAnimationFrame(waveformRAF);
+  waveformRAF = null;
+  document.querySelectorAll('.wave i').forEach(bar => { bar.style.height = ''; });
+}
+
+// ---- playback of agent audio (base64 PCM16) ----
+function playAgentAudio(base64, sampleRate = TARGET_SAMPLE_RATE){
+  if (!audioCtx) return;
+  const bytes = base64ToBytes(base64);
+  const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2);
+  const float32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+  const buffer = audioCtx.createBuffer(1, float32.length, sampleRate);
+  buffer.copyToChannel(float32, 0);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+  // Route through companionAnalyser (which is itself connected to
+  // destination) so the COMPANION waveform reacts to real playback; fall
+  // back to a direct connection if the analyser isn't set up yet.
+  src.connect(companionAnalyser || audioCtx.destination);
+  const now = audioCtx.currentTime;
+  const startAt = Math.max(now, playHead);
+  src.start(startAt);
+  playHead = startAt + buffer.duration;
+}
+
+// ---- AssemblyAI Voice Agent WebSocket (real voice path) ----
+async function connectVoiceAgent(agent_id, token){
+  const wsUrl = new URL('wss://agents.assemblyai.com/v1/ws');
+  wsUrl.searchParams.set('token', token);
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    setConn('connecting…', '');
+    // Must wait for the socket to actually be OPEN before sending --
+    // WebSocket.send() throws synchronously while still CONNECTING.
+    ws.send(JSON.stringify({ type: 'session.update', session: { agent_id } }));
+  };
+  ws.onclose = () => setConn('disconnected', '');
+  ws.onerror = () => { setConn('connection error', 'err'); showError('Voice connection error -- check the backend URL and AssemblyAI credentials.'); };
+
+  ws.onmessage = async (event) => {
+    const msg = JSON.parse(event.data);
+    switch (msg.type) {
+      case 'session.ready':
+        setConn('live', 'live');
+        await startMic();
+        setYouState('listening', { active: false });
+        setCompanionState('listening', { active: false });
+        break;
+      case 'input.speech.started':
+        setYouState('speaking');
+        setCompanionState('listening', { active: false });
+        break;
+      case 'input.speech.stopped':
+        setYouState('listening', { active: false });
+        break;
+      case 'transcript.user':
+        addLine('student', msg.text);
+        break;
+      case 'transcript.user.delta':
+        addLine('student', msg.text, { interim: true });
+        break;
+      case 'reply.started':
+        agentDeltaBuffer = '';
+        setCompanionState('explaining');
+        break;
+      case 'transcript.agent.delta':
+        // Word-level chunks aligned to playback, keyed by reply_id -- append
+        // rather than replace (contrast with transcript.user.delta, which
+        // sends the full partial text each time).
+        agentDeltaBuffer += msg.delta;
+        addLine('agent', agentDeltaBuffer, { interim: true });
+        break;
+      case 'transcript.agent': {
+        agentDeltaBuffer = '';
+        const state = classifyAgentText(msg.text);
+        addLine('agent', msg.text, { challenge: state === 'challenging' });
+        setCompanionState(state);
+        break;
+      }
+      case 'reply.done':
+        setCompanionState('listening', { active: false });
+        break;
+      case 'reply.audio':
+        playAgentAudio(msg.data);
+        break;
+      case 'session.error':
+        showError(`Voice session error: ${msg.message || msg.code}`);
+        setConn('error', 'err');
+        break;
+      case 'session.ended':
+        setConn('ended', '');
+        break;
+      default:
+        break;
+    }
+  };
+}
+
+// ---- mock-mode text chat (fallback when the backend has no AssemblyAI key) ----
+async function sendMockMessage(message){
+  addLine('student', message);
+  setYouState('speaking', { active: false });
+  mockHistory.push({ role: 'user', text: message });
+  try {
+    setCompanionState('explaining');
+    const res = await fetch(`${apiBase()}/api/mock_chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ history: mockHistory, message }),
+    });
+    if (!res.ok) throw new Error(`backend returned ${res.status}`);
+    const { reply } = await res.json();
+    const state = classifyAgentText(reply);
+    addLine('agent', reply, { challenge: state === 'challenging' });
+    setCompanionState(state, { active: false });
+    setYouState('listening', { active: false });
+    mockHistory.push({ role: 'assistant', text: reply });
+  } catch (err) {
+    showError(`Could not reach backend: ${err.message}`);
+  }
+}
+
+async function startSession(){
+  clearError();
+  $('startBtn').disabled = true;
+  try {
+    const res = await fetch(`${apiBase()}/api/token`);
+    if (!res.ok) throw new Error(`backend not reachable (${res.status})`);
+    const { token, agent_id, mock } = await res.json();
+
+    showView('viva');
+    topicKnown = false;
+    mockHistory = [];
+    setYouState('listening', { active: false });
+    setCompanionState('listening', { active: false });
+
+    if (mock) {
+      setConn('mock mode (no AssemblyAI key)', 'err');
+      $('voiceControls').style.display = 'none';
+      $('chatForm').style.display = 'flex';
+      addLine('agent', 'What topic do you want to talk about today?');
+      $('chatInput').focus();
+    } else {
+      $('voiceControls').style.display = 'flex';
+      $('chatForm').style.display = 'none';
+      setConn('connecting…', '');
+      await connectVoiceAgent(agent_id, token);
+    }
+  } catch (err) {
+    showError(`Could not start session: ${err.message}. Is the FastAPI backend running at the URL above?`);
+    setConn('failed to connect', 'err');
+    showView('start');
+  } finally {
+    $('startBtn').disabled = false;
+  }
+}
+
+function endSession(){
+  if (ws) { try { ws.send(JSON.stringify({ type: 'session.end' })); } catch(e){} ws.close(); ws = null; }
+  stopMic();
+  $('transcript').innerHTML = '<div class="empty-hint">Your conversation will appear here.<br><small>Ask a question, request an example, or ask it to argue the other side.</small></div>';
+  interimLines.student = null;
+  interimLines.agent = null;
+  $('topicLabel').textContent = 'Waiting…';
+  showView('start');
+}
+
+$('startBtn').addEventListener('click', startSession);
+$('endBtn').addEventListener('click', endSession);
+$('endBtnMock').addEventListener('click', endSession);
+$('chatForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const val = $('chatInput').value.trim();
+  if (!val) return;
+  $('chatInput').value = '';
+  sendMockMessage(val);
+});
+
+try {
+  const saved = localStorage.getItem('examPilotApiBase');
+  if (saved) $('apiBase').value = saved;
+  $('apiBase').addEventListener('change', () => { try { localStorage.setItem('examPilotApiBase', $('apiBase').value); } catch(e){} });
+} catch(e) {}
+</script>
+</body>
+</html>

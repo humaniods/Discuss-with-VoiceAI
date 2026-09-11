@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101b25" />
+    <title>ExamPilot Voice | Catch the lucky guess</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <button class="brand" id="brandButton" aria-label="Return to challenge packs">
+          <span class="brand-mark">EP</span>
+          <span>ExamPilot <em>Voice</em></span>
+        </button>
+        <div class="topbar-note"><span class="status-dot"></span> Voice diagnostic engine</div>
+      </header>
+
+      <section class="view start-view" id="startView">
+        <div class="intro-copy">
+          <p class="eyebrow">The oral exam for real understanding</p>
+          <h1>Correct answers can still hide a <span>wrong idea.</span></h1>
+          <p class="intro-text">ExamPilot listens to how you think, changes one decisive fact, and finds the gap a multiple-choice test misses.</p>
+          <div class="loop-label"><span>01</span> Ask <i></i><span>02</span> Listen <i></i><span>03</span> Challenge <i></i><span>04</span> Diagnose</div>
+        </div>
+
+        <div class="pack-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Choose a challenge pack</p><h2>Where should we test your reasoning?</h2></div>
+            <span class="duration">~90 sec</span>
+          </div>
+          <div class="pack-list" id="packList">
+            <button class="pack-card selected" data-pack="legal_reasoning">
+              <span class="pack-icon legal-icon">§</span>
+              <span class="pack-info"><strong>Legal Reasoning</strong><small>Duty, causation &amp; foreseeability</small></span>
+              <span class="pack-arrow">→</span>
+            </button>
+            <button class="pack-card" data-pack="cloud_architecture">
+              <span class="pack-icon cloud-icon">⌁</span>
+              <span class="pack-info"><strong>Cloud Scenarios</strong><small>Reliability, scale &amp; trade-offs</small></span>
+              <span class="pack-arrow">→</span>
+            </button>
+          </div>
+          <button class="primary-button" id="startButton"><span>Start Voice Viva</span><b>↗</b></button>
+          <p class="privacy-note"><span>◉</span> No login. Your practice stays in this session.</p>
+        </div>
+      </section>
+
+      <section class="view viva-view hidden" id="vivaView">
+        <div class="viva-header">
+          <button class="back-button" id="backButton">← Packs</button>
+          <div class="session-progress"><span id="packLabel">LEGAL REASONING</span><span class="progress-track"><i></i></span><span>1 / 1</span></div>
+          <span class="live-pill"><i></i> LIVE VIVA</span>
+        </div>
+        <div class="viva-grid">
+          <article class="question-card">
+            <div class="question-meta"><span class="question-number">QUESTION 01</span><span id="questionType">APPLICATION</span></div>
+            <h2 id="questionTitle">The cyclist at the blind corner</h2>
+            <p id="questionScenario">A delivery driver checks his phone while approaching a blind corner and hits a cyclist who enters the road. The cyclist suffers a fractured wrist. Which principle best determines whether the driver is liable?</p>
+            <div class="options" id="optionsList"></div>
+            <div class="question-tip"><span>✦</span> Explain <em>why</em> you chose your answer. The examiner is listening for the rule, not just the letter.</div>
+          </article>
+          <aside class="conversation-panel">
+            <div class="examiner-state" id="stateIndicator"><span class="state-icon">◌</span><div><strong id="stateTitle">Ready when you are</strong><small id="stateSubtitle">Choose an option, then explain your reasoning out loud.</small></div></div>
+            <div class="transcript" id="transcript"><div class="transcript-empty"><span>◌</span><p>Your reasoning will appear here.</p><small>Take your time. A thoughtful pause is part of the viva.</small></div></div>
+            <div class="voice-controls">
+              <button class="mic-button" id="micButton" aria-label="Start speaking"><span>●</span></button>
+              <div class="voice-copy"><strong id="micLabel">Tap to speak</strong><small>or type your explanation below</small></div>
+              <button class="end-button" id="endButton">End session</button>
+            </div>
+            <form class="text-entry" id="answerForm"><input id="answerInput" aria-label="Type your reasoning" placeholder="I choose... because..." autocomplete="off" /><button aria-label="Send reasoning">↑</button></form>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view result-view hidden" id="resultView">
+        <div class="result-top"><button class="back-button" id="resultBackButton">← New viva</button><span class="result-kicker" id="resultKicker">VIVA COMPLETE · LEGAL REASONING</span><span class="result-time">01:18</span></div>
+        <div class="result-grid">
+          <div class="result-summary"><p class="eyebrow">Your reasoning diagnosis</p><h1>Good answer.<br /><span>One missing condition.</span></h1><div class="verdict-row"><div class="verdict-badge">✓</div><div><strong id="verdictTitle">Correct answer — reasoning needs work</strong><small id="verdictSubtitle">You identified the duty, but missed the condition that makes liability follow.</small></div></div><button class="primary-button" id="tryAgainButton"><span>Try another viva</span><b>↗</b></button></div>
+          <div class="evidence-column"><div class="evidence-block"><div class="block-label"><span>01</span> What was missing</div><div class="concept-chip" id="missingConcept">FORESEEABILITY <span>↗</span></div><p id="missingDescription">Not every injury creates liability. The harm must be a reasonably foreseeable result of the breach.</p></div><div class="evidence-block exposed"><div class="block-label"><span>02</span> What exposed the gap</div><blockquote id="evidenceQuote">“If someone gets injured, the driver is automatically responsible.”</blockquote><p class="evidence-caption">Your follow-up answer treated the changed fact as irrelevant.</p></div><div class="evidence-block"><div class="block-label"><span>03</span> A stronger way to reason</div><p class="better-reasoning" id="betterReasoning">Test the chain: <strong>duty</strong> → <strong>breach</strong> → <strong>causation</strong> → <strong>foreseeability</strong>.</p></div></div>
+        </div>
+        <div class="result-footer"><span><i class="status-dot"></i> Reasoning evidence captured</span><span>ExamPilot Voice <em>·</em> Diagnostic session</span></div>
+      </section>
+
+      <footer class="footer"><span>EXAMPILOT VOICE / 2026</span><span>Built for the AssemblyAI Voice Agent Hackathon</span></footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
