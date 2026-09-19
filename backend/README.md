@@ -94,10 +94,11 @@ The mock-mode reply quality depends on whether a key is set:
 | `discuss.py` | mock-mode text-chat logic (LLM Gateway call + heuristic fallback) |
 | `sentiment.py` | live text-sentiment classifier (AssemblyAI LLM Gateway + deterministic fallback) |
 | `web_search.py` | Exa live-search adapter returning short, dated source snippets |
+| `postcall.py` | post-call transcript analysis (not yet wired into `main.py`) |
 | `test_agent_config.py` | client-tool and mandatory dynamic-fact prompt tests |
 | `test_sentiment.py` | sentiment classifier unit tests |
 | `test_web_search.py` | live-search adapter contract/error tests with mocked HTTP |
-| `legacy_teachback/` | the previous "teach it back and get graded" version's tools/schemas/store — kept for reference, not imported by anything |
+| `test_postcall.py` | post-call analysis unit tests |
 
 ## Sentiment analysis architecture
 

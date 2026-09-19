@@ -10,8 +10,8 @@ Hackathon.
 > — note the actual build below **intentionally diverges** from it: the plan
 > describes a teach-back/grading "Understanding Map" product; the app was
 > repivoted mid-build to an open discuss-and-debate companion (no verdict).
-> The retired teach-back code is kept in `backend/legacy_teachback/` in case
-> you want to go back to that direction.
+> The retired teach-back code has been removed (still in git history if
+> ever needed).
 
 ## Structure
 
@@ -25,7 +25,6 @@ app.html                      The real working app: Start -> live voice
                               orbit visualization (real topic, real state,
                               real transcript, real audio-reactive waveform)
 backend/                      FastAPI backend (see backend/README.md)
-legacy/                       Superseded MCQ-viva mock (pre-existing files)
 ```
 
 `app.html`'s Screen 2 (live discussion) recreates the landing page's visual
