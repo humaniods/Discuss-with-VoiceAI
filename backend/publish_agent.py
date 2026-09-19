@@ -8,9 +8,10 @@ Creates the agent (POST /v1/agents) the first time, and updates it in place
 Prints the agent_id and writes it back into .env so `main.py` can hand it to
 the browser via GET /api/token.
 
-This agent has no server-side tools, so unlike a tool-calling agent there's
-nothing AssemblyAI needs to call back into your backend for -- no tunnel/
-public URL required, even in dev.
+The stored agent exposes browser-executed client tools. AssemblyAI emits a
+tool.call over the existing browser WebSocket and the browser returns the
+tool.result, so AssemblyAI never calls this local backend directly and no
+tunnel/public URL is required in development.
 """
 import sys
 import httpx
