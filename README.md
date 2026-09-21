@@ -1,5 +1,7 @@
 # Discuss with VoiceAI
 
+<img src="docs/assets/hero-banner.svg" alt="Discuss with VoiceAI: an orbiting topic hub with a live YOU/COMPANION waveform, matching the app's own orbit-stage visualization" width="100%" />
+
 A voice-first **Topic Companion**: name any topic, Discuss with VoiceAI discusses
 it with you — answers questions, simplifies or goes deeper on request, and
 plays devil's advocate with short counter-questions to sharpen your
