@@ -184,8 +184,13 @@
   .mic-copy small{color:var(--dim); font-size:11px;}
   .noise-status{display:inline-flex; align-items:center; gap:6px; border:1px solid rgba(94,255,138,.28); background:rgba(94,255,138,.07); color:var(--green); padding:6px 10px; border-radius:999px; font-size:9px; letter-spacing:.1em; text-transform:uppercase; white-space:nowrap;}
   .noise-status i{width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor;}
-  .end-btn{margin-left:auto; background:transparent; border:1px solid var(--border); color:var(--dim); padding:10px 16px; border-radius:10px; cursor:pointer; font-size:13px;}
-  .end-btn:hover{color:var(--red); border-color:var(--red);}
+
+  .ctrl-btn{appearance:none; cursor:pointer; border-radius:10px; padding:10px 16px; font-size:12px; font-weight:600; letter-spacing:.03em; border:1px solid var(--border); background:var(--panel2); color:var(--text); display:inline-flex; align-items:center; gap:6px;}
+  .ctrl-btn:hover{border-color:var(--dim);}
+  .ctrl-btn:disabled{opacity:.45; cursor:not-allowed;}
+  .ctrl-btn.paused{border-color:var(--amber); color:var(--amber);}
+  .ctrl-btn.danger{border-color:rgba(255,110,110,.4); color:var(--red);}
+  .ctrl-btn.danger:hover{border-color:var(--red); background:rgba(255,110,110,.08);}
 
   .chat-form{display:flex; gap:10px; margin-top:16px;}
   .chat-form input{flex:1; background:var(--panel2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:12px 14px; font-size:14px;}
@@ -274,14 +279,14 @@
       <button class="mic-btn" id="micIndicator" disabled>●</button>
       <div class="mic-copy"><strong id="micLabel">Connecting…</strong><small>Speak naturally, interrupt anytime</small></div>
       <span class="noise-status" title="AssemblyAI Voice Focus isolates your voice on the server; browser echo cancellation prevents speaker feedback."><i></i>Voice Focus · NC on</span>
-      <button class="end-btn" id="endBtn">End session</button>
+      <button class="ctrl-btn" id="pauseBtn" type="button" disabled>⏸ Pause</button>
+      <button class="ctrl-btn danger" id="disconnectBtn" type="button" disabled>⏹ Disconnect</button>
     </div>
 
     <!-- mock-mode text fallback (shown only when the backend has no AssemblyAI key yet) -->
     <form class="chat-form" id="chatForm" style="display:none;">
       <input id="chatInput" placeholder="Type a topic, a question, or a challenge…" autocomplete="off" />
       <button type="submit">Send</button>
-      <button type="button" class="end-btn" id="endBtnMock">End</button>
     </form>
   </section>
 
@@ -339,6 +344,7 @@ let micNode = null;
 let micStarting = false;
 let playHead = 0;
 const activePlaybackSources = new Set();
+let sessionPaused = false;
 let topicKnown = false;
 let mockHistory = []; // [{role, text}]
 let activeAgentReplyId = null;
@@ -431,6 +437,20 @@ function resetVoiceTools(){
   pendingVoiceTools.forEach((entry) => entry.controller?.abort());
   pendingVoiceTools.clear();
   lastVoiceTurnEvent = null;
+}
+
+// Wipes the prior session's transcript/topic so a new "Start Discussion"
+// (including after Disconnect) opens a genuinely fresh chat, not the old
+// one's leftover messages under a new connection.
+function resetTranscriptState(){
+  $('transcript').innerHTML = '<div class="empty-hint">Your conversation will appear here.<br><small>Ask a question, request an example, or ask it to argue the other side.</small></div>';
+  interimLines.student = null;
+  interimLines.agent = null;
+  transcriptLinesById.clear();
+  agentDeltaBuffers.clear();
+  finalizedAgentReplies.clear();
+  activeAgentReplyId = null;
+  $('topicLabel').textContent = 'Waiting…';
 }
 
 function currentDateTimeSnapshot(now = new Date()){
@@ -722,7 +742,7 @@ async function startMic(){
     // good enough for a hackathon MVP; swap for AudioWorklet for production.
     micNode = audioCtx.createScriptProcessor(4096, 1, 1);
     micNode.onaudioprocess = (e) => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN || sessionPaused) return;
       const input = e.inputBuffer.getChannelData(0);
       const resampled = resampleTo(input, audioCtx.sampleRate, TARGET_SAMPLE_RATE);
       const pcm16 = floatTo16BitPCM(resampled);
@@ -764,6 +784,7 @@ function stopMic(){
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
   if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
   playHead = 0;
+  sessionPaused = false;
   $('micIndicator').classList.remove('active');
   stopWaveformLoop();
   micAnalyser = null;
@@ -802,12 +823,109 @@ function stopWaveformLoop(){
 
 // ---- playback of agent audio (base64 PCM16) ----
 function flushAgentAudio(){
+  ttsGeneration++;
+  ttsAbortController.abort();
+  ttsAbortController = new AbortController();
+  ttsChain = Promise.resolve();
+  ttsSentLength.clear();
   activePlaybackSources.forEach((source) => {
     try { source.stop(); } catch(e){}
     try { source.disconnect(); } catch(e){}
   });
   activePlaybackSources.clear();
   playHead = audioCtx ? audioCtx.currentTime : 0;
+}
+
+// ---- Sentence-streamed TTS playback (Hindi/Indian-accent voice via
+// backend /api/tts -> edge-tts, replaces AssemblyAI's own reply.audio --
+// see docs/superpowers/specs/2026-09-20-elevenlabs-tts-design.md for the
+// original design and tts.py's docstring for why it's edge-tts, not
+// ElevenLabs). Fires one /api/tts call per completed sentence, as soon as
+// transcript.agent.delta finishes it, instead of waiting for the whole
+// reply -- cuts time-to-first-audio since the model is often still
+// composing later sentences while the first one is spoken. Fetches run
+// concurrently; only the final decode+schedule step is serialized through
+// ttsChain, so playback stays in sentence order regardless of which fetch
+// resolves first. ----
+const SENTENCE_SPLIT_RE = /[^.!?।]+[.!?।]+[\"')\]]*\s*/g;
+let ttsGeneration = 0;
+let ttsAbortController = new AbortController();
+let ttsChain = Promise.resolve();
+const ttsSentLength = new Map(); // replyId -> chars already sent to TTS
+
+// Kicks off the network fetch immediately (does not wait its turn) so
+// sibling sentences' ~1s TTS round trips overlap instead of stacking.
+function fetchTtsAudio(text, signal){
+  return fetch(`${apiBase()}/api/tts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text }),
+    signal,
+  }).then((res) => {
+    if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
+    return res.arrayBuffer();
+  });
+}
+
+// Awaits an already-in-flight fetch and schedules its audio. Only this step
+// is serialized through ttsChain, so playback stays in sentence order even
+// when the underlying fetches finish out of order.
+async function playTtsBuffer(fetchPromise, generation){
+  let arrayBuffer;
+  try {
+    arrayBuffer = await fetchPromise;
+  } catch (err) {
+    if (err.name !== 'AbortError') console.warn('[playTtsBuffer] TTS fetch failed', err);
+    return;
+  }
+  if (!audioCtx || generation !== ttsGeneration) return;
+  const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+  if (generation !== ttsGeneration) return;
+  const src = audioCtx.createBufferSource();
+  src.buffer = decoded;
+  src.connect(companionAnalyser || audioCtx.destination);
+  activePlaybackSources.add(src);
+  src.onended = () => {
+    activePlaybackSources.delete(src);
+    try { src.disconnect(); } catch(e){}
+  };
+  const now = audioCtx.currentTime;
+  const startAt = Math.max(now, playHead);
+  src.start(startAt);
+  playHead = startAt + decoded.duration;
+}
+
+// Extracts any newly-completed sentences from fullText (accumulated caption
+// for replyId) that haven't been sent to TTS yet, and queues each on
+// ttsChain. `final` also flushes a trailing sentence-less remainder (e.g. a
+// short reply with no terminal punctuation).
+function speakNewSentences(replyId, fullText, final){
+  const already = ttsSentLength.get(replyId) || 0;
+  const unsent = fullText.slice(already);
+  const sentences = [];
+  let consumed = 0;
+  SENTENCE_SPLIT_RE.lastIndex = 0;
+  let match;
+  while ((match = SENTENCE_SPLIT_RE.exec(unsent)) !== null) {
+    sentences.push(match[0]);
+    consumed = SENTENCE_SPLIT_RE.lastIndex;
+  }
+  if (final) {
+    const rest = unsent.slice(consumed).trim();
+    if (rest) { sentences.push(rest); consumed = unsent.length; }
+  }
+  if (consumed > 0) ttsSentLength.set(replyId, already + consumed);
+  if (final) ttsSentLength.delete(replyId);
+
+  const generation = ttsGeneration;
+  const signal = ttsAbortController.signal;
+  for (const raw of sentences) {
+    const text = raw.trim();
+    if (!text || !audioCtx) continue;
+    const fetchPromise = fetchTtsAudio(text, signal);
+    fetchPromise.catch(() => {}); // avoid unhandled-rejection noise; playTtsBuffer awaits it for real
+    ttsChain = ttsChain.then(() => (generation === ttsGeneration ? playTtsBuffer(fetchPromise, generation) : undefined));
+  }
 }
 
 function playAgentAudio(base64, sampleRate = TARGET_SAMPLE_RATE){
@@ -850,8 +968,13 @@ async function connectVoiceAgent(agent_id, token){
   ws.onclose = () => {
     setConn('disconnected', '');
     stopMic();
+    setSessionControlsEnabled(false);
   };
-  ws.onerror = () => { setConn('connection error', 'err'); showError('Voice connection error -- check the backend URL and AssemblyAI credentials.'); };
+  ws.onerror = () => {
+    setConn('connection error', 'err');
+    showError('Voice connection error -- check the backend URL and AssemblyAI credentials.');
+    setSessionControlsEnabled(false);
+  };
 
   ws.onmessage = async (event) => {
     const msg = JSON.parse(event.data);
@@ -873,6 +996,7 @@ async function connectVoiceAgent(agent_id, token){
           await startMic();
           setYouState('listening', { active: false });
           setCompanionState('listening', { active: false });
+          setSessionControlsEnabled(true);
         } catch (err) {
           setConn('microphone error', 'err');
           showError(`Could not start microphone: ${err.message}`);
@@ -923,6 +1047,7 @@ async function connectVoiceAgent(agent_id, token){
         const caption = appendAgentDelta(agentDeltaBuffers.get(replyId) || '', msg.delta);
         agentDeltaBuffers.set(replyId, caption);
         addLine('agent', caption, { interim: true, lineId: replyId });
+        speakNewSentences(replyId, caption, false);
         break;
       }
       case 'transcript.agent': {
@@ -935,6 +1060,7 @@ async function connectVoiceAgent(agent_id, token){
         const state = classifyAgentText(msg.text);
         addLine('agent', msg.text, { challenge: state === 'challenging', lineId: replyId });
         setCompanionState(state);
+        if (!msg.interrupted) speakNewSentences(replyId || 'active', msg.text, true);
         break;
       }
       case 'reply.done':
@@ -953,7 +1079,9 @@ async function connectVoiceAgent(agent_id, token){
         setCompanionState('listening', { active: false });
         break;
       case 'reply.audio':
-        playAgentAudio(msg.data);
+        // AssemblyAI still synthesizes this server-side; discarded unplayed.
+        // speakAgentReply() (ElevenLabs, Hindi/Indian-accent) plays instead --
+        // see docs/superpowers/specs/2026-09-20-elevenlabs-tts-design.md.
         break;
       case 'tool.call':
         void handleVoiceToolCall(msg);
@@ -961,10 +1089,12 @@ async function connectVoiceAgent(agent_id, token){
       case 'session.error':
         showError(`Voice session error: ${msg.message || msg.code}`);
         setConn('error', 'err');
+        setSessionControlsEnabled(false);
         break;
       case 'session.ended':
         setConn('ended', '');
         stopMic();
+        setSessionControlsEnabled(false);
         break;
       default:
         break;
@@ -1002,6 +1132,7 @@ async function startSession(){
   clearError();
   resetSentimentState();
   resetVoiceTools();
+  resetTranscriptState();
   activeSessionId = null;
   $('startBtn').disabled = true;
   try {
@@ -1036,26 +1167,58 @@ async function startSession(){
   }
 }
 
-function endSession(){
-  if (ws) { try { ws.send(JSON.stringify({ type: 'session.end' })); } catch(e){} ws.close(); ws = null; }
-  resetVoiceTools();
+// ---- pause / disconnect controls ----
+function setSessionControlsEnabled(enabled){
+  $('pauseBtn').disabled = !enabled;
+  $('disconnectBtn').disabled = !enabled;
+  if (!enabled){
+    sessionPaused = false;
+    $('pauseBtn').textContent = '⏸ Pause';
+    $('pauseBtn').classList.remove('paused');
+  }
+}
+
+// Pauses only the USER's mic -- the agent keeps listening (WS stays open)
+// and can keep speaking/finishing its current reply. Mutes the actual mic
+// track (no audio captured) and gates the send in micNode.onaudioprocess as
+// a second guard. Deliberately does NOT touch audioCtx.suspend()/resume():
+// suspending the whole context also froze TTS playback and, on some
+// browsers, left the deprecated ScriptProcessorNode's onaudioprocess dead
+// after resume() -- the agent stopped hearing the mic for the rest of the
+// session. Keeping audioCtx running avoids both.
+function togglePause(){
+  if (!micStream) return;
+  sessionPaused = !sessionPaused;
+  micStream.getAudioTracks().forEach((track) => { track.enabled = !sessionPaused; });
+  if (sessionPaused){
+    $('pauseBtn').textContent = '▶ Resume';
+    $('pauseBtn').classList.add('paused');
+    $('micLabel').textContent = 'Paused (you)';
+  } else {
+    $('pauseBtn').textContent = '⏸ Pause';
+    $('pauseBtn').classList.remove('paused');
+    $('micLabel').textContent = 'Listening…';
+  }
+}
+
+function disconnectSession(){
+  if (ws){
+    if (ws.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify({ type: 'session.end' })); } catch(e){}
+    }
+    try { ws.close(); } catch(e){}
+    ws = null;
+  }
   stopMic();
-  $('transcript').innerHTML = '<div class="empty-hint">Your conversation will appear here.<br><small>Ask a question, request an example, or ask it to argue the other side.</small></div>';
-  interimLines.student = null;
-  interimLines.agent = null;
-  transcriptLinesById.clear();
-  agentDeltaBuffers.clear();
-  finalizedAgentReplies.clear();
-  activeAgentReplyId = null;
-  activeSessionId = null;
-  resetSentimentState();
-  $('topicLabel').textContent = 'Waiting…';
+  setSessionControlsEnabled(false);
+  setConn('disconnected', '');
   showView('start');
 }
 
+$('pauseBtn').addEventListener('click', togglePause);
+$('disconnectBtn').addEventListener('click', disconnectSession);
+
 $('startBtn').addEventListener('click', startSession);
-$('endBtn').addEventListener('click', endSession);
-$('endBtnMock').addEventListener('click', endSession);
 $('chatForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const val = $('chatInput').value.trim();

@@ -116,8 +116,10 @@ def _current_datetime_tool() -> dict:
 
 def _validate_agent_body(body: dict) -> None:
     input_config = body["input"]
-    if input_config.get("transcription_mode") != "balanced":
-        raise ValueError("Voice Agent transcription_mode must be balanced")
+    if input_config.get("transcription_mode") not in ("balanced", "min_latency", "max_accuracy"):
+        raise ValueError(
+            "Voice Agent transcription_mode must be balanced, min_latency, or max_accuracy"
+        )
     if len(input_config.get("transcription_prompt", "")) > 1750:
         raise ValueError("Voice Agent transcription_prompt exceeds 1750 characters")
     if len(input_config.get("keyterms", [])) > 100:

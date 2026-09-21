@@ -19,13 +19,14 @@ Run:
 from typing import Literal, Optional
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 import config
 import discuss
 import sentiment
+import tts
 import web_search
 
 app = FastAPI(title="Discuss with VoiceAI backend")
@@ -143,3 +144,29 @@ async def search_reference_web(body: WebSearchIn):
     except web_search.WebSearchError as exc:
         raise HTTPException(502, str(exc)) from exc
     return WebSearchOut(query=body.query, results=results)
+
+
+class TtsIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("text")
+    @classmethod
+    def reject_blank_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("text must not be blank")
+        return value
+
+
+@app.post("/api/tts")
+async def synthesize_speech(body: TtsIn):
+    """Hindi/Indian-accent voice synthesis via gTTS, replacing AssemblyAI's
+    own reply.audio (see docs/superpowers/specs/2026-09-20-elevenlabs-tts-design.md
+    for the original design; switched off ElevenLabs after its free tier got
+    disabled -- see tts.py's module docstring)."""
+
+    try:
+        audio_bytes = await tts.synthesize(body.text)
+    except tts.TtsError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return Response(content=audio_bytes, media_type="audio/mpeg")
