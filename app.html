@@ -1227,11 +1227,21 @@ $('chatForm').addEventListener('submit', (e) => {
   sendMockMessage(val);
 });
 
+// Deployed (e.g. Vercel): the backend is served from this same origin under
+// /api, so default to it and ignore any stale localhost URL saved earlier.
+const isLocalHost = ['localhost', '127.0.0.1'].includes(location.hostname);
+if (location.protocol.startsWith('http') && !isLocalHost) {
+  $('apiBase').value = location.origin;
+}
+
 try {
   const saved = localStorage.getItem('examPilotApiBase');
+  const staleLocalOnDeploy = !isLocalHost && saved && /localhost|127\.0\.0\.1/.test(saved);
   // Port 8000 is used by another local project in this workspace. Migrate
   // this app's previous default while preserving any genuinely custom URL.
-  if (saved === 'http://localhost:8000' || saved === 'http://127.0.0.1:8000') {
+  if (staleLocalOnDeploy) {
+    // keep the same-origin default set above
+  } else if (saved === 'http://localhost:8000' || saved === 'http://127.0.0.1:8000') {
     $('apiBase').value = 'http://localhost:8010';
     localStorage.setItem('examPilotApiBase', $('apiBase').value);
   } else if (saved) {

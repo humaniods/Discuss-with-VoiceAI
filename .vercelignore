@@ -1,0 +1,8 @@
+backend/.venv/
+backend/.env
+backend/test_*.py
+**/__pycache__/
+*.pyc
+.idea/
+.vscode/
+docs/superpowers/
