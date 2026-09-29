@@ -8,6 +8,10 @@ plays devil's advocate with short counter-questions to sharpen your
 thinking. No grading, no score. Built for the AssemblyAI Voice Agent
 Hackathon.
 
+**▶ Live demo: [discuss-with-voiceai.vercel.app](https://discuss-with-voiceai.vercel.app)**
+— click **Start Discussion**, allow the mic, and name a topic. Works best in
+Chrome with headphones.
+
 > Original plan doc: [ExamPilot_Voice_Hackathon_MVP.md](ExamPilot_Voice_Hackathon_MVP.md)
 > — note the actual build below **intentionally diverges** from it: the plan
 > describes a teach-back/grading "Understanding Map" product; the app was
@@ -81,7 +85,7 @@ Discussion**, confirm the Backend URL field (under "Advanced") says
 | STT language steering + Hinglish-for-Hindi TTS workaround | ✅ (`AGENT_LANGUAGE_CODES` in `.env`, see `backend/prompts.py`) |
 | Landing page ↔ app visual consistency | ✅ `app.html`'s live screen recreates the landing page's orbit/state-card/waveform design, wired to real data |
 | Semantic turn detection / barge-in | Delegated to AssemblyAI's Voice Agent defaults (not tuned) |
-| Deployment | Not deployed; Render/Railway + Vercel, backend is deploy-ready |
+| Deployment | ✅ Live on Vercel: [discuss-with-voiceai.vercel.app](https://discuss-with-voiceai.vercel.app) — FastAPI runs as a Python function (`api/index.py`) and serves both pages from the same origin |
 
 The live sentiment label is based on transcript wording, not acoustic voice
 emotion. AssemblyAI's dedicated [Speech Understanding Sentiment Analysis](https://www.assemblyai.com/docs/speech-understanding/sentiment-analysis)
