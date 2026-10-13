@@ -12,6 +12,32 @@ Hackathon.
 — click **Start Discussion**, allow the mic, and name a topic. Works best in
 Chrome with headphones.
 
+## Engineering snapshot
+
+A production-style voice application has to coordinate real-time audio, conversational state, language behavior, and safe API access. This project demonstrates those integration boundaries in an independently built public demo.
+
+| Engineering area | What this project demonstrates |
+| --- | --- |
+| Real-time interaction | Browser microphone capture, WebSocket voice events, live state and audio-reactive visualization |
+| Python backend | FastAPI endpoints and server-side token minting; API keys are not shipped to the browser |
+| Conversation design | Explain, simplify, go deeper, or challenge an idea without rigid grading |
+| Speech processing | STT language steering and a documented Hinglish/Hindi TTS workaround |
+| Asynchronous enrichment | Transcript-based sentiment labels computed without blocking the voice response |
+| Deployment | Single-origin Vercel deployment with Python API function |
+| Development fallback | Mock-mode text chat for local iteration and testing |
+
+**Honest limitations:** Turn detection and interruption behavior currently rely on the voice provider's defaults, not custom tuning. Sentiment is computed from *transcript wording*, not acoustic emotion.
+
+### What a reviewer can explore
+
+1. [Try the live discussion](https://discuss-with-voiceai.vercel.app).
+2. Review the [backend design and run instructions](backend/README.md).
+3. Inspect the [conversation persona](backend/prompts.py) and the browser-side voice interaction in `app.html`.
+
+Built by [Sanyam Sharma](https://github.com/humaniods), a Voice AI Engineer working on multilingual speech systems and Python backend integrations.
+
+---
+
 > Original plan doc: [ExamPilot_Voice_Hackathon_MVP.md](ExamPilot_Voice_Hackathon_MVP.md)
 > — note the actual build below **intentionally diverges** from it: the plan
 > describes a teach-back/grading "Understanding Map" product; the app was
